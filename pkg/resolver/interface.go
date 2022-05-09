@@ -13,5 +13,3 @@ const (
 type Resolver interface {
 	Get() (interface{}, error)
 }
-
-func (resolvers []Resolver) Get() (interface{}, error)
