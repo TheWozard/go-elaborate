@@ -55,7 +55,6 @@ func TestLookupByType(t *testing.T) {
 		data string
 	}
 	type CustomWithPointer struct {
-		other string
 	}
 	lookup := util.NewLookup(map[string]func() interface{}{
 		"one":            func() interface{} { return 1 },

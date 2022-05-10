@@ -1,12 +1,13 @@
 package job_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	"go-elaborate/pkg/job"
-	"go-elaborate/pkg/job/steps"
+	"go-elaborate/pkg/job/step"
 
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
@@ -50,28 +51,28 @@ func TestParse(t *testing.T) {
 			name:        "yaml missing job",
 			data:        `version: 1`,
 			unmarshaler: yaml.Unmarshal,
-			message:     job.Message{Version: "1", Job: &job.JobV1{}},
+			message:     job.Message{Version: "1", Job: &job.V1{}},
 		},
 		{
 			name:        "json missing job",
 			data:        `{"version": "1"}`,
 			unmarshaler: json.Unmarshal,
 			err:         fmt.Errorf("unexpected end of JSON input"),
-			message:     job.Message{Version: "1", Job: &job.JobV1{}},
+			message:     job.Message{Version: "1", Job: &job.V1{}},
 		},
 		{
 			name:        "yaml load v1",
 			data:        "version: 1\njob: {}\n",
 			unmarshaler: yaml.Unmarshal,
-			message:     job.Message{Version: "1", Job: &job.JobV1{}},
+			message:     job.Message{Version: "1", Job: &job.V1{}},
 		},
 		{
 			name:        "yaml loads job with data v1",
 			data:        "version: 1\njob:\n  steps:\n    - name: log\n",
 			unmarshaler: yaml.Unmarshal,
-			message: job.Message{Version: "1", Job: &job.JobV1{
-				Steps: []steps.Step{
-					{Name: "log", Content: &steps.LogStep{}},
+			message: job.Message{Version: "1", Job: &job.V1{
+				Steps: []step.Step{
+					{Name: "log", Content: &step.Log{}},
 				},
 			}},
 		},
@@ -87,6 +88,60 @@ func TestParse(t *testing.T) {
 				assert.Nil(t, err)
 			}
 			assert.Equal(t, test.message, message)
+		})
+	}
+}
+
+// BadJob is a struct for a job not found in the standard lookup
+type BadJob struct{}
+
+func (bj BadJob) Run(ctx context.Context) error {
+	return nil
+}
+
+func (bj BadJob) Message() job.Message {
+	message, _ := job.NewMessage(bj)
+	return message
+}
+
+func TestNewMessage(t *testing.T) {
+
+	tests := []struct {
+		name string
+		job  job.Job
+		err  error
+		yaml string
+		json string
+	}{
+		{
+			name: "invalid Job",
+			job:  BadJob{},
+			err:  fmt.Errorf("could not find version for message job_test.BadJob"),
+			yaml: "version: \"\"\njob: null\n",
+			json: `{"version":"","job":null}`,
+		},
+		{
+			name: "empty Job",
+			job:  job.V1{},
+			yaml: "version: \"1\"\njob:\n    steps: []\n",
+			json: `{"version":"1","job":{"steps":null}}`,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d/%s", i, test.name), func(t *testing.T) {
+			message, err := job.NewMessage(test.job)
+			if test.err != nil {
+				assert.EqualError(t, err, test.err.Error())
+			} else {
+				assert.Nil(t, err)
+			}
+			yaml, err := yaml.Marshal(message)
+			assert.Nil(t, err)
+			assert.Equal(t, test.yaml, string(yaml))
+			json, err := json.Marshal(message)
+			assert.Nil(t, err)
+			assert.Equal(t, test.json, string(json))
 		})
 	}
 }
